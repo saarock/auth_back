@@ -1,5 +1,12 @@
 import { Router } from "express";
-import { loginUser, logoutUser, refreshAccessToken, registerUser, sendMailToTheUser, verifyUserMail } from "../controllers/user.controller.js";
+import {
+    loginUser,
+    logoutUser,
+    refreshAccessToken,
+    registerUser,
+    sendMailToTheUser,
+    verifyUserMail
+} from "../controllers/user.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import ApiResponse from "../utils/apiResponse.js";
 
@@ -20,10 +27,12 @@ router.post("/refresh", refreshAccessToken);
 router.post("/logout", logoutUser);
 
 
+
+// first manage this things and do all the stup
 router.post("/verifyToken", verifyJWT, (req, res) => {
     try {
-    return res.status(201).json(new ApiResponse(200, null, "Verified"));
-    } catch(eror) {
+        return res.status(201).json(new ApiResponse(200, null, "Verified"));
+    } catch (eror) {
         throw new ApiError(500, error?.message || "Something went wrong while login")
     }
 });

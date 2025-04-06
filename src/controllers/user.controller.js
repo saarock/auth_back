@@ -29,7 +29,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
 
 
 
-const refreshAccessToken = asyncHandler( async (req,res) => {
+const refreshAccessToken = asyncHandler(async (req, res) => {
     const { refreshToken } = req.body;
 
     if (!refreshToken) {
@@ -38,27 +38,27 @@ const refreshAccessToken = asyncHandler( async (req,res) => {
 
     try {
         // console.log("yes: " + process.env.REFRESH_TOKEN_SECRET);
-        
+
         // Verify the refresh token
         const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
         // console.log(decoded);
 
         const user = await User.findById(decoded._id);
         console.log(user);
-        
-        
+
+
         if (!user) {
             return res.status(404).json({ message: "User not found." });
         }
 
         // Generate a new access token
         const newAccessToken = await user.generateAccessToken();
-        
-    
+
+
         // Send the new access token back in the response
         return res.status(201).json(new ApiResponse(200, newAccessToken, "Register Successfull"));
     } catch (error) {
-        return res.status(401).json({ message: error.message});
+        return res.status(401).json({ message: error.message });
     }
 })
 
@@ -150,7 +150,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
         const { userName, email, password } = req.body;
         console.log("Login user");
-        
+
         if (!(userName || email)) {
             throw new ApiError(400, "UserName or email requried");
         }
@@ -184,8 +184,6 @@ const loginUser = asyncHandler(async (req, res) => {
 
 const logoutUser = asyncHandler(async (req, res) => {
 
-
-    
     if (!req.body.user) {
         throw new ApiError(400, "User doesnot found");
     }
@@ -206,4 +204,4 @@ const logoutUser = asyncHandler(async (req, res) => {
 
 
 
-export { registerUser, sendMailToTheUser, verifyUserMail, loginUser,  refreshAccessToken, logoutUser }
+export { registerUser, sendMailToTheUser, verifyUserMail, loginUser, refreshAccessToken, logoutUser }

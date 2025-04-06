@@ -71,7 +71,6 @@ userSchema.pre("save", async function (next) {
 
 
 
-
 /**
  * 
  * @param password 
@@ -86,8 +85,6 @@ userSchema.methods.isPasswordCorrect = async function (password) {
     }
     return await bcrypt.compare(password, this.password);
 }
-
-
 
 
 
@@ -125,8 +122,6 @@ userSchema.methods.generateAccessToken = async function () {
 
 
 
-
-
 /**
  * 
  * @returns {Promise<string>}
@@ -156,8 +151,6 @@ userSchema.methods.generateRefreshToken = async function () {
         throw new Error('Error generating refresh token: ' + error.message);
     }
 };
-
-
 
 
 
