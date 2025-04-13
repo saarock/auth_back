@@ -23,8 +23,11 @@ app.use(express.static("public"));
 
 
 import userRouter from "./routers/user.router.js";
+import productRouter from "./routers/product.router.js";
 
 app.use("/api/v1/users", userRouter);
+app.use("/api/v1/users", productRouter);
+
 
 
 
