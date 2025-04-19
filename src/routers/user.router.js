@@ -1,10 +1,12 @@
 import { Router } from "express";
 import {
+    getAllUsers,
     loginUser,
     logoutUser,
     refreshAccessToken,
     registerUser,
     sendMailToTheUser,
+    updateUserStatus,
     verifyUserMail
 } from "../controllers/user.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
@@ -24,7 +26,10 @@ router.post("/mail_verify", verifyUserMail);
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.post("/refresh", refreshAccessToken);
-router.post("/logout", logoutUser);
+router.post("/logout", verifyJWT,logoutUser);
+router.get("/get-users", verifyJWT, getAllUsers);
+router.put("/deactivate-activate-user", verifyJWT, updateUserStatus);
+
 
 
 

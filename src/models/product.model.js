@@ -43,6 +43,10 @@ const productSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
+    isAvailable: {
+        type: Boolean,  // Corrected field type
+        default: true,  // You can set a default value (true or false)
+      },
 
 },
     { timestamps: true }

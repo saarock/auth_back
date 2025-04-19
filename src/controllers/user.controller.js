@@ -164,6 +164,11 @@ const loginUser = asyncHandler(async (req, res) => {
             throw new ApiError(404, "User doesnot exit");
         }
 
+        if (!user.isActive) {
+            console.log("deactivate")
+            throw new ApiError(403, "Your Account is Deactivated Pleased contact to our team.");
+        }
+
 
         const passwordCorrect = user.isPasswordCorrect(password);
         if (!passwordCorrect) {
@@ -183,22 +188,97 @@ const loginUser = asyncHandler(async (req, res) => {
 });
 
 const logoutUser = asyncHandler(async (req, res) => {
+    try {
 
-    if (!req.body.user) {
-        throw new ApiError(400, "User doesnot found");
-    }
-    await User.findByIdAndUpdate(req.body.user._id,
-        {
-            $set: { refreshToken: undefined }
-        },
-        {
-            new: true
+        if (!req.body.user) {
+            throw new ApiError(400, "User doesnot found");
         }
-    );
+        await User.findByIdAndUpdate(req.body.user._id,
+            {
+                $set: { refreshToken: undefined }
+            },
+            {
+                new: true
+            }
+        );
 
-    return res.status(200).json(new ApiResponse(200, {}, "User logged Out"));
+        return res.status(200).json(new ApiResponse(200, {}, "User logged Out"));
+
+    } catch (error) {
+        throw new ApiError(500, error?.message || "Something went wrong while logout");
+    }
 
 });
+
+
+export const getAllUsers = asyncHandler(async (req, res) => {
+    try {
+        const { page = 1, limit = 4 } = req.query; // Default to page 1 and 4 items per page
+        const pageNumber = parseInt(page);
+        const limitNumber = parseInt(limit);
+        const skip = (pageNumber - 1) * limitNumber;
+
+        const users = await User.find().skip(skip).limit(limit);
+
+
+
+        const totalUsers = await User.countDocuments(); // Get the total number of Users
+        const totalPages = Math.ceil(totalUsers / limitNumber); // Calculate total pages
+
+        res.status(200).json(new ApiResponse(200, {
+            users,
+            currentPage: pageNumber,
+            totalPages,
+            totalUsers
+        }
+            , "Users fetched successfully",
+        ));
+        console.log("user send success");
+
+    } catch (error) {
+        throw new ApiError(500, error?.message || "Something went wrong while fetching users");
+
+    }
+});
+export const updateUserStatus = asyncHandler(async (req, res) => {
+    try {
+        const { userId, updatedStatus } = req.body;
+        if (!userId) {
+            throw new ApiError(400, "Pleased Provide the userId");
+        }
+
+
+        const user = await User.findById(userId);
+        if (!user) {
+            throw new ApiError(500, error?.message || "Something went wrong while fetching users");
+        }
+
+        if (user.role === "user") {
+            throw new ApiError(500, "Accessible to Admin");
+        }
+
+        console.log(updatedStatus)
+        // user?.isActive = !updatedStatus;
+        user.isActive = updatedStatus;
+
+
+        await user.save();
+
+
+        res.status(200).json(new ApiResponse(200, {
+            user
+        }
+            , "Users fetched successfully",
+        ));
+        console.log("user send success");
+
+    } catch (error) {
+        throw new ApiError(500, error?.message || "Something went wrong while fetching users");
+
+    }
+});
+
+
 
 
 
