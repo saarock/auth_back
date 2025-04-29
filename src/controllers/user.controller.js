@@ -5,6 +5,9 @@ import User from "../models/user.model.js";
 import nodeMailer from "../utils/mailSender.js";
 import mailOtpStore from "../utils/mailOtpStore.js";
 import jwt from "jsonwebtoken"
+import Notification from "../models/notification.model.js";
+import { io } from "../app.js";
+import connectedUsers from "../utils/connectedUsers.js";
 
 
 
@@ -25,6 +28,11 @@ const generateAccessAndRefreshTokens = async (userId) => {
         throw new ApiError(500, "Error generating access and refresh token: " + error.message);
     }
 }
+
+
+
+
+
 
 
 
@@ -231,7 +239,7 @@ export const getAllUsers = asyncHandler(async (req, res) => {
             totalPages,
             totalUsers
         }
-            , "Users fetched successfully",
+            , "Users fetched successfully", ``
         ));
         console.log("user send success");
 
@@ -253,16 +261,45 @@ export const updateUserStatus = asyncHandler(async (req, res) => {
             throw new ApiError(500, error?.message || "Something went wrong while fetching users");
         }
 
-        if (user.role === "user") {
-            throw new ApiError(500, "Accessible to Admin");
-        }
+        // if (user.role === "user") {
+        //     throw new ApiError(500, "Accessible to Admin");
+        // }
 
         console.log(updatedStatus)
         // user?.isActive = !updatedStatus;
         user.isActive = updatedStatus;
 
 
+
         await user.save();
+
+
+        if (io && !user.isActive) {
+
+            io.to(connectedUsers.getUserSocketId(userId)).emit("notification-message", "You get blocked.");
+        } else {
+
+
+            io.to(connectedUsers.getUserSocketId(userId)).emit("notification-message", "You get unblocked.");
+        }
+
+
+
+        if (user.isActive) {
+            const notification = Notification({
+                user: user._id,
+                message: "Your account is activated. You can now access all the features of our application."
+            });
+            (await notification).save();
+
+        } else {
+            const notification = Notification.create({
+                user: user._id,
+                message: "Your account is deactivated. Please contact our support team for assistance."
+            });
+            (await notification).save()
+
+        }
 
 
         res.status(200).json(new ApiResponse(200, {
@@ -279,9 +316,44 @@ export const updateUserStatus = asyncHandler(async (req, res) => {
 });
 
 
+export const getNotifications = asyncHandler(async (req, res) => {
+    try {
+        const { page = 1, limit = 4, isRead = false, userId } = req.query; // Default to page 1 and 4 items per page
 
+        const limitNumber = parseInt(limit);
+        const pageNumber = parseInt(page);
+        const skip = (pageNumber - 1) * limitNumber; // Corrected skip calculation
 
+        const filter = { user: userId, isRead: isRead };
 
+        // Fetch notifications with pagination
+        const notifications = await Notification.find(filter)
+            .skip(skip)
+            .limit(limitNumber);
+
+        console.log(notifications);
+
+        if (notifications.length === 0) {
+            return res.status(200).json(new ApiResponse(200, notifications, "There are no notifications for you."));
+        }
+
+        // Get total count of notifications for pagination
+        const totalNotifications = await Notification.countDocuments(filter); // Awaiting countDocuments
+        
+        const totalPages = Math.ceil(totalNotifications / limitNumber); // Calculate total pages
+
+        return res.status(200).json(new ApiResponse(200, {
+            notifications,
+            currentPage: pageNumber,
+            totalPages,
+            totalNotifications
+        }, "Your notifications."));
+
+    } catch (error) {
+        console.error(error.message);
+        return res.status(500).json(new ApiResponse(500, null, "Something went wrong."));
+    }
+});
 
 
 export { registerUser, sendMailToTheUser, verifyUserMail, loginUser, refreshAccessToken, logoutUser }

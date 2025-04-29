@@ -1,9 +1,12 @@
+import BuyProducts from "../models/buyProduct.model.js";
 import Product from "../models/product.model.js";
 import User from "../models/user.model.js";
 import ApiResponse from "../utils/apiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import moment from "moment"
 import fs from "fs";
+import Notification from "../models/notification.model.js";
 
 export const saveProduct = asyncHandler(async (req, res, next) => {
     const { name, description, price, expiryDate, stock, category, userId } = req.body;
@@ -81,10 +84,6 @@ export const saveProduct = asyncHandler(async (req, res, next) => {
 export const getAllProducts = asyncHandler(async (req, res) => {
     const { page = 1, limit = 4, search = '', categoryFilter = '', availabilityFilter = '', disabled = 2 } = req.query; // Default to page 1 and 4 items per page
 
-    console.log("---- -- -- - --")
-    console.log(availabilityFilter);
-    console.log(categoryFilter);
-    console.log(disabled);
 
     const pageNumber = parseInt(page);
     const limitNumber = parseInt(limit);
@@ -268,4 +267,282 @@ export const editTheProducts = asyncHandler(async (req, res) => {
         // Handle unexpected errors
         res.status(500).json({ message: error.message });
     }
+});
+
+export const BuyProduct = asyncHandler(async (req, res) => {
+    try {
+        const products = req.body;
+        console.log(products);
+
+        if (!products || products.length <= 0) {
+            return res.status(404).json({ message: 'Product not found' });
+        }
+
+
+
+
+        // Use a for...of loop instead of forEach to handle async/await properly
+        for (const product of products) {
+
+            const alreadySavedProduct = await Product.findById(product.productId);
+            if (!alreadySavedProduct) {
+                throw new Error("No product found while buying Product");
+            }
+
+            if (alreadySavedProduct.stock <= 0) {
+                return res.status(500).json({ message: "No stock available" });
+            }
+
+            // Update product stock
+            alreadySavedProduct.stock -= parseInt(product.totalItem);
+
+            // Save the updated product
+            await alreadySavedProduct.save();
+
+            // Record the purchase in BuyProducts
+            await BuyProducts.create({
+                user: product.userId,
+                product: product.productId,
+                price: parseInt(product.totalPrice),
+                totalItems: parseInt(product.totalItem),
+
+            });
+            await Notification.create({
+                user: product.userId,
+                message: `You have purchase ${product.productName},  ${product.totalItem} items.`
+            });
+        }
+
+        return res.status(200).json(new ApiResponse(200, null, "Product bought successfully"));
+
+    } catch (error) {
+        console.error("Error during product purchase:", error);
+        return res.status(500).json({ message: error.message });
+    }
+});
+
+
+
+
+
+
+
+export const getPurchaseStats = asyncHandler(async (req, res) => {
+    try {
+        const { userId } = req.query;
+
+        // Ensure the userId is provided
+        if (!userId) {
+            return res.status(400).json({ message: "User ID is required." });
+        }
+
+        // Get the total number of completed purchases
+        const totalCompletedPurchases = await BuyProducts.countDocuments({ user: userId, status: "completed" });
+
+        // Get the total number of distinct users who have made purchases
+        const totalUsersCount = await BuyProducts.distinct('user'); // List of unique users who made purchases
+
+        // Get the total number of distinct products purchased
+        const totalProductsCount = await BuyProducts.distinct('product'); // List of unique products purchased
+
+        // Find all purchases for the user
+        const userPurchases = await BuyProducts.find({ user: userId }, { createdAt: 1 }); // Only retrieve createdAt field
+
+        // Extract the dates from the user purchases
+        const purchaseDates = userPurchases.map(purchase => moment(purchase.createdAt).format("YYYY-MM-DD"));
+
+        // If no purchases found, return empty stats
+        if (purchaseDates.length === 0) {
+            return res.status(200).json({
+                totalCompletedPurchases,
+                totalUsersCount: totalUsersCount.length, // Number of distinct users
+                totalProductsCount: totalProductsCount.length, // Number of distinct products
+                purchases: [] // Empty array if no data
+            });
+        }
+
+        // Return the aggregated data
+        return res.status(200).json({
+            totalCompletedPurchases,
+            totalUsersCount: totalUsersCount.length, // Total distinct users
+            totalProductsCount: totalProductsCount.length, // Total distinct products
+            purchases: purchaseDates // Only dates
+        });
+    } catch (error) {
+        console.error("Error fetching purchase stats:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+
+// Controller to manage booked products
+export const manageBookedProduct = asyncHandler(async (req, res) => {
+
+    // Extract query parameters (with default values)
+    const { page = 1, limit = 10, status, search = "", id } = req.query;
+
+
+    if (!id || id === undefined || id === "undefined") {
+
+        throw new Error("No id available")
+    }
+    // Find the user by id
+    const user = await User.findById(id);
+    if (!user) {
+        return res.status(404).json({ message: "User not found" });
+    }
+
+    const skip = (page - 1) * limit; // Pagination skip logic
+
+
+    // Admin logic (fetch all booked products)
+    if (user.role === "admin") {
+        // Search filter based on the search term (username search)
+        const searchFilter = search
+            ? { user: await User.findOne({ userName: { $regex: search, $options: "i" } }).select("_id") } // Find user by username
+            : {}; // If no search term, no filter is applied
+
+
+        const bookedProducts = await BuyProducts.find({
+            ...searchFilter,
+            status: status || { $in: ["pending", "completed", "cancelled"] },
+
+        })
+            .populate("user", "userName") // Populate with the username of the user who made the booking
+            .populate("product", "name")
+            .skip(skip)
+            .limit(Number(limit))
+            .sort({ createdAt: -1 }); // Sort by newest bookings
+
+        // Count the total number of booked products for pagination
+        const total = await BuyProducts.countDocuments({
+            ...searchFilter,
+
+            status: status || { $in: ["pending", "completed", "cancelled"] },
+
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: bookedProducts,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit), // Calculate total pages
+            },
+        });
+    }
+
+    // User logic (fetch only the logged-in user's booked products)
+    else {
+
+        console.log(search + " ppppppppppppppppppppppppppppppppppp")
+        // Search filter based on the search term (username search)
+        const searchFilter = search
+            ? { product: await Product.findOne({ name: { $regex: search, $options: "i" } }).select("_id") }
+            : {}; // If no search term, no filter is applied
+
+
+        const bookedProducts = await BuyProducts.find({
+            user: user._id,
+            status: status || { $in: ["pending", "completed", "cancelled"] },
+            ...searchFilter,
+        })
+            .skip(skip)
+            .populate("product", "name")
+            .limit(Number(limit))
+            .sort({ createdAt: -1 }); // Sort by newest bookings
+
+        // Count the total number of bookings for the user
+        const total = await BuyProducts.countDocuments({
+            user: user._id,
+            status: status || { $in: ["pending", "completed", "cancelled"] },
+            ...searchFilter,
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: bookedProducts,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit), // Calculate total pages
+            },
+        });
+    }
+});
+
+
+
+
+export const changeStatusOfTheBookeditems = asyncHandler(async (req, res) => {
+    const { productId, newStatus } = req.body;
+
+    if (!productId || !newStatus) {
+        throw new Error("Product id and status were required");
+    }
+    const product = await BuyProducts.findById(productId);
+    if (!product) {
+        throw new Error("No product found");
+    }
+
+    product.status = newStatus;
+    await product.save();
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            product,
+            "Product status changed successfull"
+        )
+    );
+
+
+
+});
+
+
+
+// Controller to generate the bill for a user
+export const generateBill = asyncHandler(async (req, res) => {
+    const { userId, status } = req.query;
+
+    const products = await BuyProducts.find({ user: userId }).populate("product", "name price").populate("user", "userName");
+
+    if (products.length <= 0) {
+        throw new Error("No products found");
+    }
+
+    let totalPrice = 0;
+
+    const allTheDetails = products.map((product) => {
+        totalPrice += product.price;
+        product.status = status;
+        return {
+            name: product.product.name,
+            perPPrice: product.product.price,
+            totalItems: product.totalItems,
+            soTheMultiPrice: product.price,
+            status: product.status,
+        }
+    });
+
+    let anotherPrice = totalPrice;
+
+
+    if (status) {
+        await Promise.all(products.map(p => p.save()));
+    }
+    return res.status(200).json(
+        new ApiResponse(200, {
+            allTheDetails,
+            anotherPrice,
+            userName: products[0].user.userName
+        })
+    )
+
+
+
 });
