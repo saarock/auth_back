@@ -13,8 +13,8 @@ beforeAll(async () => {
 
   // Login and fetch token
   const loginRes = await request(app).post("/user/login").send({
-    email: "saarock200@gmail.com",
-    password: "12345"
+    email: "test@example.com",
+    password: "test123"
   });
 
   token = loginRes.body.accessToken;
